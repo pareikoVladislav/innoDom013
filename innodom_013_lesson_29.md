@@ -187,15 +187,16 @@ def hello_page(request):
 
 ```html
 <!--templates.main.html-->
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
     {% load static %}
     <meta charset="UTF-8">
-    <link rel="stylesheet" href="{% static 'todo/css/styles.css' %}">
-    <link rel="stylesheet" href="{% static 'todo/css/tasks.css' %}">
-    <link rel="stylesheet" href="{% static 'todo/css/task_form.css' %}">
-    <link rel="stylesheet" href="{% static 'todo/css/task_info.css' %}">
+    <meta name="viewport"
+          content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <link type="text/css" rel="stylesheet" href="{% static 'tasks/css/styles.css' %}">
+    <link type="text/css" rel="stylesheet" href="{% static 'tasks/css/tasks.css' %}">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet"
           integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous">
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"
@@ -247,6 +248,7 @@ def hello_page(request):
         </div>
     </nav>
     {% block content %}
+        <h1>{{ welcome_message }}</h1>
     {% endblock %}
 </div>
 </body>
@@ -320,9 +322,6 @@ objects = YourModel.objects.filter(Q(field=value) | Q(field=value))
 
 ```python
 # apps.todo.views
-from django.shortcuts import render
-
-
 def get_all_tasks(request):
     tasks = Task.objects.all()
 
@@ -332,7 +331,7 @@ def get_all_tasks(request):
 
     return render(
         request=request,
-        template_name='todo/all_todos.html',
+        template_name='tasks/all_tasks.html',
         context=content
     )
 ```
@@ -346,7 +345,7 @@ All Tasks
 {% endblock %}
 
 {% block content %}
-<div class="todos">
+<div class="tasks">
     {% for task in tasks %}
     <div class="task">
         <h2>title: {{ task.title }}</h2>
@@ -367,9 +366,9 @@ All Tasks
 # apps.todo.urls
 from django.urls import path
 
-from apps.todo.views import get_all_tasks
+from apps.tasks.views import get_all_tasks
 
-app_name = 'todos'
+app_name = 'tasks'
 
 urlpatterns = [
     path("", get_all_tasks, name='all-tasks'),
@@ -382,8 +381,10 @@ urlpatterns = [
 # apps.router
 from django.urls import path, include
 
+app_name = 'router'
+
 urlpatterns = [
-    path("tasks/", include('apps.todo.urls')),
+    path("tasks/", include('apps.tasks.urls')),
 ]
 
 ```
@@ -414,21 +415,25 @@ MEDIA_URL = "/media/"
 
 ```python
 # app.urls.py
-urlpatterns = [
-    path("admin/", admin.site.urls),
-    path("", include("apps.router")),
-]
+from django.conf import settings
+from django.conf.urls.static import static
+from django.contrib import admin
+from django.urls import path, include
 
-urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)  # new
-urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)  # new
+urlpatterns = [
+    path('admin/', admin.site.urls),
+    path('', include('apps.router')),
+]
+urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
 # new
 if settings.DEBUG:
     import debug_toolbar
 
     urlpatterns = [
-                      path('__debug__/', include(debug_toolbar.urls)),
-                  ] + urlpatterns
+        path('__debug__/', include(debug_toolbar.urls)),
+    ] + urlpatterns
 
 ```
 
@@ -452,34 +457,6 @@ if settings.DEBUG:
                                  | img
 ```
 
-```html
-<!--templates/todo/all_todos.html-->
-{% extends 'main.html' %}
-{% load static %} <!-- NEW -->
-
-{% block title %}
-All Tasks
-{% endblock %}
-
-{% block content %}
-<link rel="stylesheet" href="{% static 'todo/css/tasks.css' %}">  <!-- NEW -->
-<div class="todos">
-    {% for task in tasks %}
-    <div class="task">
-        <h2>title: {{ task.title }}</h2>
-        <h4>category: {{ task.category }}</h4>
-        <h4>status: <b>{{ task.status }}</b></h4>
-        <p><b>description: </b>{{ task.description }}</p>
-        <h4>creator: {{ task.creator }}</h4>
-        <h4>date started: {{ task.date_started }}</h4>
-        <h4>deadline: {{ task.deadline }}</h4>
-    </div>
-    {% endfor %}
-</div>
-{% endblock %}
-
-```
-
 И напишем стилей в самом CSS:
 
 ```css
@@ -496,7 +473,7 @@ body {
 
 ```css
 /*apps.todo.static.todo.css.tasks.css*/
-.todos {
+.tasks {
     display: flex;
     flex-wrap: wrap;
     gap: 20px;
@@ -568,7 +545,7 @@ body {
 ```python
 # apps.todo.forms.py
 from django.contrib.auth.models import User
-from django.forms import fields, widgets, ModelForm
+from django.forms import fields, widgets, Form
 from django.forms import ModelChoiceField
 
 from apps.todo.models import (
@@ -579,22 +556,18 @@ from apps.todo.models import (
 )
 
 
-class CreateTaskForm(ModelForm):
+class CreateTaskForm(Form):
     title = fields.CharField(max_length=25)
     description = fields.CharField(max_length=1500, widget=fields.Textarea)
     creator = ModelChoiceField(queryset=User.objects.all())
     category = ModelChoiceField(queryset=Category.objects.all(), required=False)
     status = ModelChoiceField(queryset=Status.objects.all())
 
-    date_started = fields.DateField(widget=widgets.DateInput(attrs={'type': 'date'}))
     deadline = fields.DateField(widget=widgets.DateInput(attrs={'type': 'date'}))
-    updated_at = fields.DateTimeField(widget=widgets.DateTimeInput(attrs={'type': 'datetime-local'}), required=False)
-    deleted_at = fields.DateTimeField(widget=widgets.DateTimeInput(attrs={'type': 'datetime-local'}), required=False)
 
     class Meta:
         model = Task
         fields = '__all__'
-
 ```
 
 Создание формы схоже на создание модели, тут так же имеются поля, которые\
@@ -707,11 +680,6 @@ Create New Task
         </div>
 
         <div class="mb-3">
-            <label for="date_started" class="form-label">Date Started</label>
-            <input type="date" class="form-control" id="date_started" name="date_started">
-        </div>
-
-        <div class="mb-3">
             <label for="deadline" class="form-label">Deadline</label>
             <input type="date" class="form-control" id="deadline" name="deadline">
         </div>
@@ -730,11 +698,6 @@ Create New Task
 
 ```python
 # apps.todo.views.py
-from django.shortcuts import render, redirect
-
-from news.forms import CreateNewsForm
-from news.models import News
-
 
 def create_new_task(request):
     users = User.objects.all()
@@ -746,7 +709,7 @@ def create_new_task(request):
         if form.is_valid():
             task_data = form.cleaned_data
             Task.objects.create(**task_data)
-            return redirect('router:todos:all_tasks')
+            return redirect('router:tasks:all-tasks')
 
         context = {
             "form": form,
@@ -765,7 +728,7 @@ def create_new_task(request):
 
     return render(
         request=request,
-        template_name='todo/create_task.html',
+        template_name='tasks/create_task.html',
         context=context
     )
 ```
@@ -836,7 +799,7 @@ def create_new_task(request):
 class TaskUpdateForm(ModelForm):
     class Meta:
         model = Task
-        fields = ('title', 'description', 'category', 'status', 'updated_at',)
+        fields = ('title', 'description', 'category', 'status', 'deadline',)
 ```
 
 Теперь нам нужно создать новую вьюшку(отображение) - спец функцию, которая\
@@ -854,26 +817,27 @@ def update_task(request, task_id):
 
         if form.is_valid():
             form.save()
-            return redirect('router:todos:all_tasks')
+            return redirect('router:tasks:all-tasks')
 
         context = {
             "form": form,
+            "task": task,
             "categories": categories,
             "statuses": statuses
         }
-
     else:
         form = TaskUpdateForm(instance=task)
 
         context = {
             "form": form,
+            "task": task,
             "categories": categories,
             "statuses": statuses
         }
 
     return render(
         request=request,
-        template_name='todo/update_task.html',
+        template_name='tasks/update_task.html',
         context=context
     )
 ```
@@ -898,21 +862,23 @@ Update task
 
         <div class="mb-3">
             <label for="title" class="form-label">Title</label>
-            <input type="text" class="form-control" id="title" name="title" maxlength="25" placeholder="Title">
+            <input type="text" class="form-control" id="title" name="title"
+                   maxlength="25" placeholder="Title" value="{{ task.title }}">
         </div>
 
         <div class="mb-3">
             <label for="description" class="form-label">Description</label>
-            <textarea class="form-control" id="description" name="description" maxlength="1500"
-                      placeholder="Description"></textarea>
+            <textarea class="form-control" id="description" name="description" maxlength="1500">
+                {{ task.description }}
+            </textarea>
         </div>
 
         <div class="mb-3">
             <label for="category" class="form-label">Category</label>
             <select class="form-control" id="category" name="category">
-                <option value="" selected="">---</option> <!-- For optional category -->
+                <option value="" selected="">{{ task.category }}</option> <!-- For optional category -->
                 {% for category in categories %}
-                <option value="{{ category.id }}">{{ category.name }}</option>
+                    <option value="{{ category.id }}">{{ category.name }}</option>
                 {% endfor %}
             </select>
         </div>
@@ -920,16 +886,16 @@ Update task
         <div class="mb-3">
             <label for="status" class="form-label">Status</label>
             <select class="form-control" id="status" name="status">
-                <option value="" selected="">---</option>
+                <option value="" selected="">{{ task.status }}</option>
                 {% for status in statuses %}
-                <option value="{{ status.id }}">{{ status.name }}</option>
+                    <option value="{{ status.id }}">{{ status.name }}</option>
                 {% endfor %}
             </select>
         </div>
 
         <div class="mb-3">
-            <label for="updated_at" class="form-label">Updated At</label>
-            <input type="date" class="form-control" id="updated_at" name="updated_at">
+            <label for="deadline" class="form-label">Deadline</label>
+            <input type="date" class="form-control" id="deadline" name="deadline">
         </div>
 
         <button type="submit" class="btn btn-primary">Update</button>
@@ -942,21 +908,14 @@ Update task
 
 ```python
 # apps.todo.urls.py
-from django.urls import path
-
-from apps.todo.views import (
-    get_all_tasks,
-    create_new_task,
-    update_task,  # NEW
-)
-
-app_name = 'todos'
+app_name = 'tasks'
 
 urlpatterns = [
-    path("", get_all_tasks, name='all_tasks'),
-    path("create/", create_new_task, name='create-task'),
-    path("<int:task_id>/update/", update_task, name='update-task'),  # NEW
+    path('', get_all_tasks, name='all-tasks'),
+    path('create/', create_new_task, name='create-tasks'),
+    path("<int:task_id>/update/", update_task, name='update-task'),
 ]
+
 
 ```
 
@@ -975,9 +934,10 @@ def get_task_info_by_task_id(request, task_id):
 
     return render(
         request=request,
-        template_name='todo/task_info.html',
+        template_name='tasks/task_info.html',
         context=context
     )
+
 ```
 
 ```html
@@ -1000,8 +960,8 @@ def get_task_info_by_task_id(request, task_id):
         <h4>deadline: {{ task.deadline }}</h4>
     </div>
     <div class="button-container">
-        <button class="update-button"><a href="{% url 'router:todos:update-task' task.id %}">Update</a></button>
-        <button class="delete-button"><a href="{% url 'router:todos:delete-task' task.id %}">Delete</a></button>
+        <button class="update-button"><a href="{% url 'router:tasks:update-task' task.id %}">Update</a></button>
+        <button class="delete-button"><a href="{% url 'router:tasks:delete-task' task.id %}">Delete</a></button>
     </div>
 </div>
 {% endblock %}
@@ -1085,114 +1045,28 @@ def get_task_info_by_task_id(request, task_id):
 
 ```python
 # apps.todo.urls.py
+
+app_name = 'tasks'
+
 urlpatterns = [
-    path("", get_all_tasks, name='all-tasks'),
-    path("create/", create_new_task, name='create-task'),
-    path("<int:task_id>/", get_task_info_by_task_id, name='task-detail'),  # NEW
+    path('', get_all_tasks, name='all-tasks'),
+    path('create/', create_new_task, name='create-tasks'),
+    path('<int:task_id>/', get_task_info_by_task_id, name='task-info'),  # NEW
+    path("<int:task_id>/update/", update_task, name='update-task'),
 ]
+
 ```
 
-Добавить овзможность в этой задаче редактировать её и удалять
+Добавить возможность в этой задаче редактировать(уже есть) её и удалять
 
 ```python
 # apps.todo.views.py
-def update_task(request, task_id):
-    task = get_object_or_404(Task, id=task_id)
-    categories = Category.objects.all()
-    statuses = Status.objects.all()
-
-    if request.method == 'POST':
-        form = TaskUpdateForm(request.POST, instance=task)
-
-        if form.is_valid():
-            form.save()
-            return redirect('router:todos:all_tasks')
-
-        context = {
-            "form": form,
-            "categories": categories,
-            "statuses": statuses
-        }
-
-    else:
-        form = TaskUpdateForm(instance=task)
-
-        context = {
-            "form": form,
-            "categories": categories,
-            "statuses": statuses
-        }
-
-    return render(
-        request=request,
-        template_name='todo/update_task.html',
-        context=context
-    )
-
 
 def delete_task(request, task_id):
     task = get_object_or_404(Task, id=task_id)
 
     task.delete()
-    return redirect('router:todos:all-tasks')
-```
-
-```html
-<!--templates/todo/update_task.html-->
-{% extends 'main.html' %}
-
-{% block title %}
-Update task
-{% endblock %}
-
-{% block content %}
-<div class="new-task-title">
-    Update Task
-</div>
-<div class="new-task-container">
-    <form method="post">
-        {% csrf_token %}
-
-        <div class="mb-3">
-            <label for="title" class="form-label">Title</label>
-            <input type="text" class="form-control" id="title" name="title" maxlength="25" placeholder="Title">
-        </div>
-
-        <div class="mb-3">
-            <label for="description" class="form-label">Description</label>
-            <textarea class="form-control" id="description" name="description" maxlength="1500"
-                      placeholder="Description"></textarea>
-        </div>
-
-        <div class="mb-3">
-            <label for="category" class="form-label">Category</label>
-            <select class="form-control" id="category" name="category">
-                <option value="" selected="">---</option> <!-- For optional category -->
-                {% for category in categories %}
-                <option value="{{ category.id }}">{{ category.name }}</option>
-                {% endfor %}
-            </select>
-        </div>
-
-        <div class="mb-3">
-            <label for="status" class="form-label">Status</label>
-            <select class="form-control" id="status" name="status">
-                <option value="" selected="">---</option>
-                {% for status in statuses %}
-                <option value="{{ status.id }}">{{ status.name }}</option>
-                {% endfor %}
-            </select>
-        </div>
-
-        <div class="mb-3">
-            <label for="updated_at" class="form-label">Updated At</label>
-            <input type="date" class="form-control" id="updated_at" name="updated_at">
-        </div>
-
-        <button type="submit" class="btn btn-primary">Update</button>
-    </form>
-</div>
-{% endblock %}
+    return redirect('router:tasks:all-tasks')
 ```
 
 Ну и ссылками подвязать всё
@@ -1219,7 +1093,7 @@ Update task
 <div class="container">
     <nav class="navbar navbar-expand-lg navbar-light bg-light">
         <div class="container-fluid">
-            <a class="navbar-brand" href="{% url 'router:home' %}">MyApp</a>
+            <a class="navbar-brand" href="#">MyApp</a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
                     data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent"
                     aria-expanded="false" aria-label="Toggle navigation">
@@ -1228,7 +1102,7 @@ Update task
             <div class="collapse navbar-collapse" id="navbarSupportedContent">
                 <ul class="navbar-nav me-auto mb-2 mb-lg-0">
                     <li class="nav-item">
-                        <a class="nav-link active" aria-current="page" href="{% url 'router:home' %}">Home</a>
+                        <a class="nav-link active" aria-current="page" href="#">Home</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="#">Profile</a>
@@ -1239,7 +1113,7 @@ Update task
                             Tasks
                         </a>
                         <ul class="dropdown-menu" aria-labelledby="navbarDropdown">
-                            <li><a class="dropdown-item" href="{% url 'router:todos:all-tasks' %}">All</a></li>
+                            <li><a class="dropdown-item" href="{% url 'router:tasks:all-tasks' %}">All</a></li>
                             <li><a class="dropdown-item" href="#">Subtasks</a></li>
                             <li>
                                 <hr class="dropdown-divider">
@@ -1248,7 +1122,7 @@ Update task
                         </ul>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{% url 'router:todos:create-task' %}" tabindex="-1">Add Task</a>
+                        <a class="nav-link" href="{% url 'router:tasks:create-task' %}" tabindex="-1">Add Task</a>
                     </li>
                 </ul>
                 <form class="d-flex">
